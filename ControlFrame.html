@@ -1,0 +1,838 @@
+<!-- TODO Jagun: Save & Read CSV file of a list of tasks;
+				Since JS generally does not allow saving to file browser-independently, we can open a new window and export all data onto it and
+				ask the user to save as the contents of the windows as a text file. f
+				Reading from a file is a different - might be able to use a HTML5 drag-and-drop feature, see
+				http://www.html5rocks.com/en/tutorials/file/dndfiles/
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />
+<title>UCL Light Scheduler - by Jagun Kwon (jagun.kwon@ucl.ac.uk)</title>
+
+
+<!-- Original Source code for the ChromaWhite demo light controller interface -->
+	<!-- jquery and jqm -->
+	<!--<link rel="stylesheet" href="assets/jquery.mobile-1.1.1.min.css" />
+	<script type="text/javascript" src="assets/jquery-1.7.1.min.js"></script>
+	<script type="text/javascript" src="assets/jquery.mobile-1.1.1.min.js"></script>
+	<script type="text/javascript" src="assets/jquery.ba-throttle-debounce.js"></script> -->
+
+	<link rel="stylesheet" type="text/css" href="photonstar.css">
+
+	<!-- icons -->
+	<!-- Standard iPhone --> 
+	<link rel="apple-touch-icon" sizes="57x57" href="assets/images/ios-icon-114.png" />
+	<!-- Retina iPhone --> 
+	<link rel="apple-touch-icon" sizes="114x114" href="assets/images/ios-icon-114.png" />
+	<!-- Standard iPad --> 
+	<link rel="apple-touch-icon" sizes="72x72" href="assets/images/ios-icon-144.png" />
+	<!-- Retina iPad --> 
+	<link rel="apple-touch-icon" sizes="144x144" href="assets/images/ios-icon-144.png" />
+
+    <!-- screen -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="viewport" content="width=device-width, minimum-scale=1, maximum-scale=1">
+
+    <script type="text/javascript">
+    var triggerUrl = "/trigger/";
+    var ControllerIpAddress = top.location.host.toString();
+	//var ControllerIpAddress = "192.168.0.200";
+    var centralButtonArray = new Array();
+	centralButtonArray[0] = "Off";
+	centralButtonArray[1] = "On";
+	centralButtonArray[2] = "Auto";
+	currentSystemState = 0;
+
+	setCentralButton();
+	getCurrentTime();
+    
+    setInterval(function(){getCurrentTime()},1000);
+    setInterval(function(){setCentralButton()},5000);
+    setInterval(function(){getCurrentPreset()},5000);
+
+    function sendTrigger (triggerData) {
+        $.ajax({
+           type: "GET",
+           url: triggerUrl + triggerData
+        });
+	}
+
+	function centralButtonClicked() {
+		currentSystemState = currentSystemState + 1
+		if (currentSystemState > 2)
+		{
+			currentSystemState = 0
+		}
+		$("#central_button").text(centralButtonArray[currentSystemState]);
+		sendTrigger('2');
+		$('#cct_slider').val('128');
+	}
+
+	function presetButtonClicked(buttonNum) {		
+		$(".find-preset-number").children().css("background-color", "#b8b8b8");
+		$(".find-preset-number").children().eq(buttonNum - 1).css("background-color", "#66ccff");
+		sendTrigger('8?var=00'+buttonNum);
+	}
+
+	function setCentralButton () {
+		$.ajax({
+			type: "GET",
+			url: "http://" + ControllerIpAddress + "/query/variable?SYSTEM_STATE",
+			dataType: "xml",
+			success: function (xml) {
+				$(xml).find("response").each(function(){
+					$(this).find("variable").each(function(){
+						currentSystemState = parseInt($(this).text());
+						$("#central_button").text(centralButtonArray[currentSystemState]);
+					});
+				});
+			}
+		})
+	}
+
+	function getCurrentPreset () {
+		$.ajax({
+			type: "GET",
+			url: "http://" + ControllerIpAddress + "/query/variable?PRESET",
+			dataType: "xml",
+			success: function (xml) {
+				
+				$(xml).find("response").each(function(){
+					console.log($(this).text());
+					$(this).find("variable").each(function(){
+						presetState = parseInt($(this).text());
+						$(".find-preset-number").children().css("background-color", "#b8b8b8");
+						if (presetState != 0)
+						{
+							$(".find-preset-number").children().eq(presetState - 1).css("background-color", "#66ccff");
+						}
+					})
+				});
+			}
+		})
+	}
+
+	function getCurrentTime () {
+		
+		$.ajax({
+			type: "GET",
+			url: "http://" + ControllerIpAddress + "/query/currentTime?",
+			dataType: "xml",
+			success: function(xml) {
+				$(xml).find("response").each(function(){
+					$("#getTime").text($(this).find("time").text());
+				})
+			}
+		});
+	}
+
+    function cctSliderValueChanged(value)
+    {
+        if (lastCctSliderValue != cctSliderValue)
+        {        
+          	$.ajax({
+	            type: "GET",
+	            url: "trigger/14?" + cctSliderValue
+	        });
+	        lastCctSliderValue = cctSliderValue;
+        }
+    }
+
+    function intensitySliderValueChanged(value)
+    {
+        if (lastIntensitySliderValue != intensitySliderValue)
+        {        
+          	$.ajax({
+	            type: "GET",
+	            url: "trigger/16?" + intensitySliderValue
+	        });
+	        lastIntensitySliderValue = intensitySliderValue;
+        }
+    }
+
+	$(document).bind('pageinit', function() {
+		$('.slider_div > input').hide();
+
+		$('#cct_slider').change(function() {
+            cctSliderValue = this.value;
+            $('#cct_slider_value').html(Math.floor(((this.value / 255) * (6500 - 2700)) + 2700)+"K");
+        });
+        $('#cct_slider').change($.throttle(500, true, cctSliderValueChanged));
+
+        $('#intensity_slider').change(function() {
+            intensitySliderValue = this.value;
+            $('#intensity_slider_value').html(Math.floor((this.value * 100) / 255)+"%");
+        });
+        $('#intensity_slider').change($.throttle(500, true, intensitySliderValueChanged));
+	});
+    
+    var cctSliderValue = 0;
+    var lastCctSliderValue = 0;
+    var intensitySliderValue = 0;
+    var lastIntensitySliderValue = 0;
+
+    </script>
+
+
+<!-- Code below written by Jagun Kwon (jagun.kwon@ucl.ac.uk) -->
+
+<link rel="stylesheet" href="lightscheduler.css" />
+<script type="text/javascript">
+<!-- /* Hide content from old browsers */
+/* 
+	This is a light scheduler for PhotonStar/Pharos's lights
+	Code by Jagun Kwon
+	Written: 26 Feb 2014
+	Late Updated: 26 Feb 2014
+*/
+	// Declare global variables
+	var taskList = new Array();		// Keeps the tast list
+	
+	var sequenceStarted = 0;		// Tells whether a sequence has not started, started, paused, or stopped
+									// 0 = stopped, 1 = started, 2 = paused, 3 = restarted
+	// These vars to keep the start time of a sequence
+	var seqInitTime;
+	var tmpTime;
+	var restartTime;
+	var pauseTime;		// time paused
+	var accTime;		// accumulated time - used for pauses
+	var toggleDisplay = 1;
+	
+	var currentTask = 0;	// keeping the currently running tasks's id (+1)
+	
+	// For delay starting
+	var delayStartEnabled = 0;	// 0 = Not enabled, 1 = enabled
+	var startHour;
+	var startMinute;
+	var startSecond;
+	
+	var gradationModeOn = 0;	// Gradation mode - off by default
+	// The following variables are used for the gradation mode to store the CCT and intensity increments per second
+	var intensityIncrement = 0;
+	var CCTIncrement = 0;
+	var curIntensity = 0;
+	var curCCT = 0;			// This is the sensor input value (i.e., not between 2700 and 6500)
+
+	parent.taskDisplayFrame.location = 'DisplayFrame.html';
+   
+	// Add a new task to schedule
+	function addTask() 
+	{
+		// If there is a running sequence, warn the user.
+		if (sequenceStarted == 1 || sequenceStarted == 3) {
+			alert("Cannot add a new task while the current sequence is running. Either stop or pause the current sequence and add a new task.");
+			return;
+		}
+		var index = taskList.length;
+		// get input values
+		var task = document.taskForm.taskbox.value.trim();
+
+		var lightvalue = Number(document.taskForm.lightbox.value.trim());
+		var colourvalue = Number(document.taskForm.colourbox.value.trim());
+
+		var hour = document.taskForm.hourbox.value.trim();
+		var minute = document.taskForm.minutebox.value.trim();
+		var second = document.taskForm.secondbox.value.trim();
+
+		// check input
+		/*
+		if(task == '')
+		{
+			alert('Please enter a task name!');
+			return;
+		}*/
+		//if(hour == '' || isNaN(hour) || minute == '' || isNaN(minute) || second == '' || isNaN(second)||
+		//	hour > 24 || hour < 0 || minute > 60 || minute < 0 || second > 60 || second < 0)
+		if(isNaN(hour) || isNaN(minute) || isNaN(second)||
+			hour > 24 || hour < 0 || minute > 60 || minute < 0 || second > 60 || second < 0)
+		{
+			alert('Invalid duration(s) entered');
+			return;
+		}
+
+		if (lightvalue > 100 || lightvalue < 0) {
+			alert('Invalid light intensity entered');
+			return;
+		}
+		if (colourvalue > 6500 || colourvalue < 2700) {
+			alert('Invalid colour temperature entered');
+			return;
+		}
+		
+		// add task to taskList
+		taskList[index] = new Object;
+		taskList[index].task = task;
+		taskList[index].lightvalue = lightvalue;
+		taskList[index].colourvalue = colourvalue;
+		taskList[index].hour = checkTime(hour);
+		taskList[index].minute = checkTime(minute);
+		taskList[index].second = checkTime(second);
+
+		// TESTING - gradation mode
+		if (document.getElementById('gradation').checked) {
+            if (gradationModeOn == 0)	// if just turned on for the first time
+				alert("Gradation Mode On. To switch it off, reset this session by pressing F5 (you will lose all scheduled tasks).");
+			gradationModeOn = 1;
+        } else {
+			if (gradationModeOn == 1) {	// if Gradation Model is already turned on, it should be on for this session
+				// TODO - in the future version, we could allow gradation mode for each task
+				alert("You have already turned on the gradation mode. Cannot switch it off for this session.");
+			}
+        }
+		
+		displayTasks();
+
+	}
+	
+	// display tasks according to priority
+	function displayTasks() 
+	{
+		var tskcount = 0;
+		
+		with(parent.taskDisplayFrame.document)
+		{
+			open();
+			writeln('<!DOCTYPE html">');
+			writeln('<html>');
+			writeln('<head>');
+			//write('<meta http-equiv="Content-Type" ');
+			//writeln('content="text/html; charset=ISO-8859-1" />');
+			write('<title>Light Scheduler');
+			writeln('</title><link rel="stylesheet" href="lightscheduler.css" /></head><body>');
+			if (gradationModeOn == 1) {
+				writeln('<center><h2>List of Scheduled Tasks : Gradation Mode</h2>');
+			} else {
+				writeln('<center><h2>List of Scheduled Tasks</h2>');
+			}
+			writeln('<table><thead><tr class="odd"><td>Running Time (hh:mm:ss)</td><td>Current Task</td></tr></thead>');
+			writeln('<tr><td style="text-align:center;"><h2 id="timetxt">00:00:00</h2></td><td style="text-align:center;"><h2 id="tid">0</h2></td></tr></table>');
+			write('<table border="3px solid"><thead><tr><td>');
+			writeln('NO.</td><td>TASK</td><td>LIGHT INTENSITY(%)</td><td>COLOUR TEMP(K)</td><td>DURATION</td></tr></thead>');
+			
+			for (var i = 0 ; i < taskList.length ; i++) 
+			{
+				tskcount++;
+				
+				if(tskcount % 2 == 1) {	// set odd table row style
+					write('<tr><td style="text-align:center;">' + tskcount + '</td>');
+				} else {
+					write('<tr class="odd"><td style="text-align:center;">' + tskcount + '</td>');
+				}
+				
+				write('<td style="text-align:center;">' + taskList[i].task + '</td>');
+				write('<td style="text-align:center;">' + taskList[i].lightvalue + '</td>');
+				write('<td style="text-align:center;">' + taskList[i].colourvalue + '</td>');
+				
+				write('<td style="text-align:center;">' + checkTime(taskList[i].hour) + ':' +
+					checkTime(taskList[i].minute) + ':' + checkTime(taskList[i].second) + '</td></tr>');
+					
+				// TODO(Jagun): Add EDIT and DELETE buttons here - edit will open a new window with a form to change the current task
+			}
+
+			// Show task count
+			writeln('<tfoot><tr><td colspan="2" style="text-align:right;">Total:</td><td colspan="3" style="text-align:left;">' + tskcount + ' tasks</td></tr></tfoot>');
+			writeln('</table></center></body></html>');
+			close();
+		}
+	}
+	
+	
+	// This sub-function actually changes the light intensity and cct - expecting direct sensor input values
+	// This function should only be called in real-deployment on Pharos Hardware
+	
+	function setLightOutput( cct,  intensity) {
+	// *** Change light values HERE: TODO this will be enabled when in use with the actual lighting hardware
+	// UNCOMMENT THIS Block for real deployment <--------------------------------------------------------
+	// { COMMENT this part if simulating on PC
+
+				// Room choice in Jevons Room (user can choose either all, room 1, or room 2)
+				// By default, it's all
+				var room = document.getElementsByName('roomselection');
+				if (room[0].checked) {
+					sendTrigger('20?var=00' + 0);	// 0 = All, 1, 2
+				} else if (room[1].checked) {
+					sendTrigger('20?var=00' + 1);	// 0 = All, 1, 2
+				} else if (room[2].checked) {
+					sendTrigger('20?var=00' + 2);	// 0 = All, 1, 2
+				}
+
+				cctSliderValue = cct;
+				cctSliderValueChanged();
+				
+				intensitySliderValue = intensity;
+				intensitySliderValueChanged();
+
+				// @Jagun TODO May/2014: Create another textarea and output the following information + current time stamp,
+				// so that the user can copy & paste the information for further analysis.
+				// We could output the current values every second or per task (e.g., time, intensity, cct)
+				//alert("Intensity: "+intensitySliderValue + ", " + "cct : " + cctSliderValue);
+
+	// } UNCOMMENT THIS >
+	}
+	
+
+		
+	var taskDurationS = 0;	// Task duration: for the gradation mode
+	var newTask = 1;		// flag for starting a new task: for the gradation mode
+					
+	// Check task list and change lighting
+	function changeLight() {
+		
+		var today = new Date();
+		var h = today.getHours();
+		var m = today.getMinutes();
+		var s = today.getSeconds();
+		
+		// add a zero in front of numbers<10
+		h = checkTime(h+'');  // Sometimes this should be treated as a string
+		m = checkTime(m+'');
+		s = checkTime(s+'');
+		document.getElementById('logger').innerHTML += h + ":" + m + ":" + s + ", " + Number(curIntensity/255*100) + ", " +
+			Number(curCCT/255*3800+2700) + '\n';
+		
+		if (sequenceStarted == 1 || sequenceStarted == 3) {
+			// Task expired and schedule the next task with a new expiration time
+			// This should only happen when running
+			
+
+			if (delayStartEnabled == 0) {
+
+				if (gradationModeOn == 1) {
+				// @Jagun TODO 13/May/2014: If the Gradation mode is On, we will change light gradually every second
+				// From the current light values to the next task's 
+				
+					// Current task will take the allocated time to gradually change the light
+					// If the current task is allocated 10s, that means the light will change from the previous state to the new
+					// desired state over the 10s period.
+					
+					// calculate the total period - total duration in seconds
+					var totalDurationS = (taskList[currentTask].second*1000 + taskList[currentTask].minute*60*1000 +
+						taskList[currentTask].hour*60*60*1000) / 1000;
+					
+					// Target Sensor Values
+					var sensorValueLight = (taskList[currentTask].lightvalue * 255 /100);
+					var sensorValueCCT = (((taskList[currentTask].colourvalue - 2700) * 255) / 3800);
+					
+					// Checking and flagging negative gradation mode (i.e., numbers shrinking)
+					var negGradIntensity = 0;	// Growing positively
+					var negGradCCT = 0;	
+					// If the current values are greater than the target values
+					if (curIntensity > sensorValueLight) {	negGradIntensity = 1; } else { negGradIntensity = 0;}
+					if (curCCT > sensorValueCCT) {	negGradCCT = 1; } else { negGradCCT = 0;}
+					
+					// If the set duration is 0, then we need to change light status immediately without delay.
+					if (totalDurationS <= 0) {
+						// This sub-function changes the light cct and intensity immediately
+						setLightOutput(Math.floor(sensorValueCCT),
+							// y/(6500-2700=3800) : x/255 
+							// equals to 3800x : 255y
+							Math.floor(sensorValueLight));
+						
+						currentTask++;
+						t = setTimeout(changeLight, 1);	// Call as soon as possible (in 1ms)
+						return;
+					}				
+					
+					if (currentTask <= 0) {	// If this is the first task, we will increment from the 0% light intensity & lowest cct
+						// Start with light intensity: 0% and CCT: 2700K
+						intensityIncrement = sensorValueLight / totalDurationS;	// This is the target light intensity
+						CCTIncrement = sensorValueCCT / totalDurationS;	// This is the target CCT value
+					} else {
+					// If this isn't the first task, then we will increment light values from the previous task
+						// In fact, an increment can be a decrement as well! for a minus value
+						intensityIncrement = ((taskList[currentTask].lightvalue - taskList[currentTask-1].lightvalue) * 255 / 100) / totalDurationS;
+						CCTIncrement = (sensorValueCCT - (((taskList[currentTask-1].colourvalue - 2700) * 255) / 3800)) / totalDurationS;
+					}
+					
+					//var prevCurIntensity = curIntensity;
+					//var intensitySame = 0;
+					//var prevCurCCT = curCCT;
+					//var cctSame = 0;
+					
+					// These are actual converted sensor input values (rather than % or K).
+					curIntensity += intensityIncrement;
+					curCCT += CCTIncrement;
+					
+					//if (prevCurIntensity == CurIntensity) { intensitySame = 1;}
+					//if (prevCurCCT == curCCT) { cctSame = 1;}
+
+					
+					setLightOutput(Math.floor(curCCT), Math.floor(curIntensity));
+					
+					// Schedule next timeout - we could change light every second or any predefined time - but for now 1s will do.
+					t = setTimeout(changeLight, 1000);	// updating every second
+					// if paused and restarted, but remaining time must be calculated
+					
+					// --------------- VERBOSE DEBUG MODE ---------------- Comment this out
+					/*
+					document.getElementById('logger').value += "DEBUG TaskNo:" + Number(currentTask+1) +
+						", Target Intensity: " + sensorValueLight + ",Current:" + curIntensity + "(inc.:"+intensityIncrement + ")" +
+						", Target CCT: " + sensorValueCCT + ",Current:" + curCCT + "(inc:" + CCTIncrement +")\n";
+					
+					// Check if growing negatively or positively and when the Threshold is reached move on to the next task.
+					//DEBUG : If any of the value is NOT supposed to change from ith and i+1th step, we will run this by mistake!!!					
+					if (negGradIntensity == 0 && negGradCCT == 0) {
+					// DEBUG - if one of them does not change or stay 0, we mistakenly finish and move on to next task.
+						//if (!intensitySame || !cctSame)
+						if (curIntensity >= sensorValueLight || curCCT >= sensorValueCCT) {	 currentTask++;	}
+					} else if (negGradIntensity == 1 && negGradCCT == 0) {
+						if (curIntensity <= sensorValueLight || curCCT >= sensorValueCCT) { currentTask++;	}
+					} else if (negGradIntensity == 0 && negGradCCT == 1) {
+						if (curIntensity >= sensorValueLight || curCCT <= sensorValueCCT) {	 currentTask++;	}
+					} else if (negGradIntensity == 1 && negGradCCT == 1) {
+						if (curIntensity <= sensorValueLight || curCCT <= sensorValueCCT) {	 currentTask++;	}
+					}
+					*/
+					// TERNATION CONDITION: OPTION 2 - USING TIME
+					// Calculate the total duration of each task in seconds and deduct 1s every time
+					if (newTask == 1) {
+						taskDurationS = ((taskList[currentTask].second*1000 + taskList[currentTask].minute*60*1000 +
+							taskList[currentTask].hour*60*60*1000) / 1000)-1;
+						newTask = 0;
+					} else {
+						taskDurationS--;
+					}
+					if (taskDurationS <= 0)	{ currentTask++; newTask = 1; }
+					
+					if (currentTask >= taskList.length) {		// We've been through all tasks
+						stopSequence();
+						return;
+					}
+					
+					// Display the currently running task
+					parent.taskDisplayFrame.document.getElementById('tid').innerHTML = "<font color=\"red\"><h2>" + (currentTask+1) + "</h2></font>";	
+				
+				} else {	// If no gradation mode
+							
+					// This sub-function actually changes the light cct and intensity
+					setLightOutput(Math.floor(((taskList[currentTask].colourvalue - 2700) * 255) / 3800),
+						// y/(6500-2700=3800) : x/255 
+						// equals to 3800x : 255y
+						Math.floor(taskList[currentTask].lightvalue * 255 /100));
+
+
+					// @Jagun TODO May/2014: Create another textarea and output the following information + current time stamp,
+					// so that the user can copy & paste the information for further analysis.
+					// We could output the current values every second or per task (e.g., time, intensity, cct)
+					//alert("Intensity: "+intensitySliderValue + ", " + "cct : " + cctSliderValue);
+
+					// Schedule next timeout
+					t = setTimeout(changeLight,taskList[currentTask].second*1000 + 	// times in milliseconds
+						taskList[currentTask].minute*60*1000 +
+						taskList[currentTask].hour*60*60*1000);
+						// if paused and restarted, but remaining time must be calculated
+					
+					currentTask++;
+				}
+
+				if (currentTask >= taskList.length) {		// We've been through all tasks
+					stopSequence();
+					return;
+				}
+				
+				// Display the currently running task
+				parent.taskDisplayFrame.document.getElementById('tid').innerHTML = "<font color=\"red\"><h2>" + (currentTask+1) + "</h2></font>";	
+
+			} else {
+				// Schedule next timeout for delay start
+				var now = new Date(seqInitTime.getSeconds()*1000 + seqInitTime.getMinutes()*60*1000 +
+					seqInitTime.getHours()*60*60*1000);
+				var startT = new Date(startSecond*1000 + startMinute*60*1000 + startHour*60*60*1000);
+				var projectedT = startT.getTime() - now.getTime();
+				
+				//alert (startT.getTime() + " & " + now.getTime());
+				// Work with the difference between now and the delayed start time#
+				//alert(startHour + ":" + startMinute + ":" + startSecond +" :ProjectedTime: " + projectedT + ":NOW: " + now.getTime());
+				t = setTimeout(changeLight, projectedT);
+				return;
+				
+				//t = setTimeout(changeLight, (startSecond-s)*1000 + taskList[currentTask].second*1000 + 	// times in milliseconds
+				//	(startMinute-m)*60*1000 + taskList[currentTask].minute*60*1000 +
+				//	(startHour-h)*60*60*1000 + taskList[currentTask].hour*60*60*1000);
+					// if paused and restarted, but remaining time must be calculated
+			}
+			
+		}	else if (sequenceStarted == 2) {
+			// If paused, nullify the effect of the last timeout by doing currentTask--
+			currentTask--;
+			// TODO only need to wait the remaining time for this current task next time this gets restarted!!!!
+		}
+	}
+   
+	// Display the current time
+	function startTime()
+	{
+		var today = new Date();
+		var h = today.getHours();
+		var m = today.getMinutes();
+		var s = today.getSeconds();
+		
+		// add a zero in front of numbers<10
+		h = checkTime(h+'');  // Sometimes this should be treated as a string
+		m = checkTime(m+'');
+		s = checkTime(s+'');
+		document.getElementById('txt').innerHTML = h + ":" + m + ":" + s;
+
+		// If delay-start is enabled
+		if (delayStartEnabled == 1) {
+			if (startHour == h && startMinute == m && startSecond == s) {
+				// Record this sequence's new start time
+				seqInitTime = new Date(today);
+				delayStartEnabled = 0;	// Now is time to run
+			}
+		}
+		
+		// If delay start is NOT enabled
+		if (delayStartEnabled == 0) {		// this is not joined as else part on purpose!
+			// Check if the sequence has started
+			if (sequenceStarted == 1) {
+				tmpTime = new Date(today.getTime() - seqInitTime.getTime());			
+
+				parent.taskDisplayFrame.document.getElementById('timetxt').innerHTML =
+					checkTime(tmpTime.getHours()+'') + ":" + 
+					checkTime(tmpTime.getMinutes()+'') + ":" +
+					checkTime(tmpTime.getSeconds()+'');
+								
+			} else if (sequenceStarted == 2) {//If previously started/restarted and being paused
+				if(toggleDisplay == 1) {
+					parent.taskDisplayFrame.document.getElementById('timetxt').innerHTML = "<font color=\"red\">"+
+						checkTime(restartTime.getHours()+'') + ":" + 
+						checkTime(restartTime.getMinutes()+'') + ":" +
+						checkTime(restartTime.getSeconds()+'') + "</font>";	
+					toggleDisplay = 0;
+				} else {
+					parent.taskDisplayFrame.document.getElementById('timetxt').innerHTML = "<font color=\"blue\">" +
+						checkTime(restartTime.getHours()+'') + ":" + 
+						checkTime(restartTime.getMinutes()+'') + ":" +
+						checkTime(restartTime.getSeconds()+'') + "</font>";
+					toggleDisplay = 1;
+
+				}
+			} else if (sequenceStarted == 3) {	// If previously paused and being restarted
+				accTime = new Date(today.getTime() - pauseTime.getTime() + restartTime.getTime());
+				
+				parent.taskDisplayFrame.document.getElementById('timetxt').innerHTML =
+					checkTime(accTime.getHours()+'') + ":" + 
+					checkTime(accTime.getMinutes()+'') + ":" +
+					checkTime(accTime.getSeconds()+'');
+					
+			}
+		}
+
+		//t = setTimeout(startTime,1000);
+		t = setTimeout(startTime,950);
+	}
+
+	// Add 0 in front of single-digit letters
+	function checkTime(i)
+	{
+		if (i<10 && i.length < 2) {
+			i="0" + i;
+		}
+		return i;
+	}
+   
+	// Start the scheduled jobs in sequence
+	function startSequence()
+	{
+		// Record this sequence's start time; will be used in startTime()
+		seqInitTime = new Date();
+		
+		if (sequenceStarted != 0) {
+			alert("A schedule might be running now. Stop the current sequence first.");
+			return;
+		} else if (taskList.length <= 0) {
+			alert("No tasks scheduled. Add a new task first.");
+			return;
+		}
+		
+		// For delay-starting
+		startHour = document.taskForm.starthour.value.trim();
+		startMinute = document.taskForm.startminute.value.trim();
+		startSecond = document.taskForm.startsecond.value.trim();
+		
+		if(isNaN(startHour) || isNaN(startMinute) || isNaN(startSecond)||
+			startHour > 24 || startHour < 0 || startMinute > 60 || startMinute < 0 || startSecond > 60 || startSecond < 0)
+		{
+			alert('Invalid start time entered');
+			return;
+		}
+		
+
+		if (startHour != 0 && startMinute != 0 && startSecond != 0)
+		{
+				// If delay start is enabled
+			var startT = new Date(startSecond*1000 + startMinute*60*1000 + startHour*60*60*1000); 
+			var now = new Date(seqInitTime.getSeconds()*1000 + seqInitTime.getMinutes()*60*1000 +
+						seqInitTime.getHours()*60*60*1000);		
+			if (startT < now) {
+				alert('The start time must be later than now!');
+				return;
+			}
+			
+			alert('Delay-start enabled: the sequence will run at ' + startHour + ":" +
+			startMinute + ":" + startSecond);
+			delayStartEnabled = 1;
+		} else {
+			delayStartEnabled = 0;
+		}
+		
+		document.getElementById('logger').value = "";	// Clear the output console
+		
+		sequenceStarted = 1;	// Sequence scheduler STARTED
+				
+		// Set timer to expire after the first task
+		changeLight();
+	}
+	
+	function pauseSequence()
+	{
+		if (sequenceStarted == 0) {
+			alert("Sequence has not started and cannot be paused.");
+			return;
+		}
+
+		pauseTime = new Date();
+
+		if (sequenceStarted == 1){			
+			restartTime = tmpTime;
+			sequenceStarted = 2;	// Sequence scheduler PAUSED
+		} else if (sequenceStarted == 2) {	// if previously paused
+			sequenceStarted = 3;	// Sequence scheduler RESTARTED	
+			changeLight();			// Reschedule next task
+		} else if (sequenceStarted == 3) {	// if previously restarted
+			restartTime = accTime;
+			sequenceStarted = 2;	// Sequence scheduler PAUSED
+		}
+	}
+	
+	function stopSequence()
+	{
+		alert("Stopping the current sequence. If you wish to restart the same sequence, just press the Start Sequence button. Press F5 to start a new fresh sequence.");
+		sequenceStarted = 0;	// Sequence scheduler STOP
+		delayStartEnabled = 0;
+		currentTask = 0;
+	}
+	
+// end hiding content from old browsers  -->
+</script>
+</head>
+
+<body onload="startTime()">
+<center>
+<table> <tr><td>
+<img src="images/UCL-EI.png"></img></td>
+<td><h3>Current Time (hh:mm:ss):<div id="txt"></div></h3></td></tr>
+</table>
+
+<h1>UCL Light Controller</h1>
+<form action="none" name="taskForm">
+<table>
+    <tr class="odd">
+        <td style="text-align:left;"><font size="+1">Task:</font></td>
+        <td><input type="text" name="taskbox" size="34" maxlength="40" /></td>
+    </tr>
+    <tr>
+        <td style="text-align:left;"><font size="+1">Light Intensity:</font></td>
+		<!--<td>
+		<div class="slider_div" data-role="fieldcontain">
+			<label id="intensity_slider_value" for="intensity_slider">0%</label>
+			<input width="100%" type="range" name="Intensity Slider" id="intensity_slider" value="0" min="0" max="255"/>
+		</div>
+		</td>	-->
+		<td><input type="text" name="lightbox" size="5" maxlength="3" value="0"/>% (Range 0 to 100)</td>
+    </tr>
+    <tr class="odd">
+        <td style="text-align:left;"><font size="+1">Colour Temperature:</font> </td>
+		<!--<td>
+		<div class="slider_div" data-role="fieldcontain">
+			<label id="cct_slider_value" for="cct_slider">2700K</label>
+			<input width="100%" type="range" name="CCT Slider" id="cct_slider" value="0" min="0" max="255" />
+		</div>
+		</td> -->
+		
+		<td><input type="text" name="colourbox" size="5" maxlength="5" value="2700"/>K (Range 2700 to 6500)</td>
+    </tr>
+    <tr>
+        <td style="text-align:left;"><font size="+1">Duration:</font></td>
+        <td>
+        	Hours:<input type="text" name="hourbox" size="2" maxlength="2" value="0"/>
+			Minutes:<input type="text" name="minutebox" size="2" maxlength="2" value="0"/>
+			Seconds:<input type="text" name="secondbox" size="2" maxlength="2" value="0"/>
+			</td>
+    </tr>
+</table>
+
+<table>
+    <tr style="height:25px"><td></td><td></td></tr>
+	<tr>
+        <td style="text-align:left;"><font size="+1">Delay start at</font></td>
+        <td>
+        	Hours:<input type="text" name="starthour" size="2" maxlength="2" value="0"/>
+			Minutes:<input type="text" name="startminute" size="2" maxlength="2" value="0"/>
+			Seconds:<input type="text" name="startsecond" size="2" maxlength="2" value="0"/>
+		</td>
+    </tr>
+	<tr>
+        <td style="text-align:left;"><font size="+1">Gradation Mode</font></td>
+        <td>
+        	<input type="checkbox" name="gradation" id="gradation" value="gradationOn"/> Tick to turn on the Gradation Mode 
+		</td>
+    </tr>
+	<tr>
+        <td style="text-align:left;"><font size="+1">Room Selection</font></td>
+        <td>
+			<input type="radio" name="roomselection"  value="All" checked="checked">All
+			<input type="radio" name="roomselection"  value="Room1" >Room 1
+			<input type="radio" name="roomselection"  value="Room2" >Room 2<br /><br />
+		</td>
+    </tr>	
+			
+    <tr>
+    	<td></td>
+        <td><h3><a href="javascript:addTask()">Add New Task</a></h3></td>
+<!--        <td><button type="button" onclick="javascript:addTask()">Add New Task</button></td> -->
+    </tr>
+
+    <tr>
+        <td></td>
+        <td><h3><a href="javascript:startSequence()">START SEQUENCE</a></h3></td>
+		<!-- On the actual Pharos webserver, Button tag isn't supported -->
+		<!--<td><button type="button" onclick="javascript:startSequence()">Start Sequence</button></td> -->
+    </tr>
+
+	<tr>
+        <td></td>
+        <td><h3><a href="javascript:pauseSequence()">PAUSE/RESTART SEQUENCE</a></h3></td>
+		<!--<td><button type="button" onclick="javascript:pauseSequence()">Pause/Restart Sequence</button></td> -->
+
+    </tr>
+	<tr>
+        <td></td>
+        <td><h3><a href="javascript:stopSequence()">STOP SEQUENCE</a></h3></td>
+	<!--	<td><button type="button" onclick="javascript:stopSequence()">Stop Sequence</button></td> -->
+
+    </tr>
+	
+</table>
+
+	<!-- TODO: 
+	CURRENTLY THERE IS A BUG - TASKS DON'T RUN TO THEIR FULL TIME ALLOCATED on the real machine - it works fine on PC..... -->
+	
+	
+	
+	<BR /><H4>Log Information (Time, Light Intensity Value, CCT value)</H4>
+	<!--<input type="textarea" name="logger" id="logger" cols="20" rows="10" value="Log Information (Time, Light Intensity Value, CCT value)"/> 
+	-->
+	<textarea name="logger" id="logger" cols="60" rows="20" > </textarea>
+
+</form>
+<BR /><BR /><BR /><H4>
+Press F5 to start a new schedule (warning: all existing tasks will be removed).
+<BR />
+For support, contact <a href=mailto:jagun.kwon@ucl.ac.uk>jagun.kwon@ucl.ac.uk</a></h4>
+</center>
+</body>
+</html>
